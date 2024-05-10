@@ -1,14 +1,16 @@
 #!/bin/bash
 
+# 默认偏移量
+default_offset_lat="0.002053979116"
+default_offset_lon="-0.004352461249"
+
 INPUT="$1"
 OUTPUT=${INPUT%.*}
-OUTPUT=fix/${OUTPUT}_fix.gpx
-echo output is $OUTPUT
-offset_lat="0.002053979116"
-offset_lon="-0.004352461249"
+OUTPUT="fix/${OUTPUT}_fix.gpx"
+echo "output is $OUTPUT"
 
 if [ ! -d fix ] ; then 
-    echo mkdir fix
+    echo "mkdir fix"
     mkdir fix
 fi
 
@@ -21,25 +23,39 @@ echo "Total lines to process: $total_lines"
 # 初始化已处理的行数
 processed_lines=0
 
-while read l ; do 
-    # 更新已处理的行数
-    ((processed_lines++))
+# 初始化偏移量
+offset_lat=""
+offset_lon=""
 
-    # 计算并显示进度百分比
-    percent=$(echo "scale=2; $processed_lines/$total_lines*100" | bc)
-    echo -ne "Processing: $percent% \r"
+awk -v default_offset_lat="$default_offset_lat" -v default_offset_lon="$default_offset_lon" -v total_lines="$total_lines" -v input_lat="$2" -v input_lon="$3" '
+BEGIN { 
+    offset_lat = ""; 
+    offset_lon = ""; 
+}
+/<trkpt lat=/ {
+    lat = gensub(/.*lat="([^"]*)".*/, "\\1", "g");
+    lon = gensub(/.*lon="([^"]*)".*/, "\\1", "g");
+    if (offset_lat == "" || offset_lon == ""){
+        if (input_lat != "" && input_lon != "") {
+            offset_lat=sprintf("%.15f", input_lat - lat);
+            offset_lon=sprintf("%.15f", input_lon - lon);
+        }else{
+            offset_lat = default_offset_lat
+            offset_lon = default_offset_lon
+        }
+    }
+    fixed_lat=sprintf("%.15f", lat + offset_lat);
+    fixed_lon=sprintf("%.15f", lon + offset_lon);
+    print "<trkpt lat=\"" fixed_lat "\" lon=\"" fixed_lon "\">" >> "'$OUTPUT'"
+    processed_lines++;
+    percent=processed_lines/total_lines*100;
+    printf("Processing: %.2f% \r", percent);
+}
+! /trkpt lat=/ {
+    print >> "'$OUTPUT'"
+    processed_lines++;
+    percent=processed_lines/total_lines*100;
+    printf("Processing: %.2f% \r", percent);
+}' "$INPUT"
 
-    if [ ! -z "`echo $l | grep \<trkpt\ lat=`" ] ; then
-        lat=`echo $l |sed 's/.*lat="\([^"]*\)".*/\1/'`
-        lon=`echo $l |sed 's/.*lon="\([^"]*\)".*/\1/'`
-        fixed_lat=`echo $lat + $offset_lat |bc`
-        fixed_lon=`echo $lon + $offset_lon |bc`
-        # echo "<trkpt lat=\"$fixed_lat\" lon=\"$fixed_lon\">" 
-        echo "<trkpt lat=\"$fixed_lat\" lon=\"$fixed_lon\">" >> "$OUTPUT"
-    else 
-        echo $l >>"$OUTPUT"
-    fi 
-done < "$INPUT"
-
-# 清除进度显示的行
-echo -ne "\nFinished processing all lines.\n"
+echo "Finished processing all lines."
