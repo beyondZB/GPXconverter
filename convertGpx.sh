@@ -25,8 +25,8 @@ else
     exit 1
 fi
 
-echo $target_start_lat
-echo $target_start_lon
+echo target_start_lat: $target_start_lat
+echo target_start_lon: $target_start_lon
 
 # 默认偏移量
 default_offset_lat="0.002053979116"
